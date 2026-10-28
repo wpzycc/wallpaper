@@ -1,5 +1,6 @@
-console["log"]("%c 极数本源壁纸系统重构 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-var seting = { apiUrl: "https://v1.apizero.cn/api/wallpaper", ratio: 0.618, types: '风景' }; 
+console["log"]("%c 极简壁纸系统 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+// 换用一个稳定、支持跨域和HTTPS的公共图片接口
+var seting = { apiUrl: "https://api.uomg.com/api/rand.img3", ratio: 0.618, types: '风景' }; 
 var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
@@ -22,7 +23,7 @@ function loadData(types, newload) {
         $("body").removeClass(); 
         $(".jigsaw").removeAttr("style") 
     } 
-    ajaxWal(seting.types, 20) 
+    ajaxWal(seting.types, 1) 
 } 
 
 resizeHeight(); 
@@ -64,31 +65,37 @@ function ajaxWal(cid, count) {
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    $.ajax({
-        type: "GET",
-        url: seting.apiUrl,
-        data: { category: cid, count: count },
-        dataType: "json",
-        success: function (jsonData) {
-            if (jsonData && jsonData.data && jsonData.data.images) {
-                var images = jsonData.data.images;
-                for (var i = 0; i < images.length; i++) {
-                    addJigsaw(images[i].url, images[i].tag_text || '壁纸');
+    // 这里为了防封，一次性只拉取 10 张图（因为它其实还是基于随机图的逻辑）
+    var loadedCount = 0;
+    var targetCount = 10; // 每次加载10张，防封
+
+    function fetchOne() {
+        if (loadedCount >= targetCount) {
+            jigsaw.ajaxing = false;
+            $("#loadmore").hide();
+            return;
+        }
+        $.ajax({
+            type: "GET",
+            url: seting.apiUrl,
+            data: { format: "json" },
+            dataType: "json",
+            success: function (jsonData) {
+                if(jsonData && jsonData.code == 1 && jsonData.imgurl) {
+                    // 这个接口返回的就是纯粹的图片直链
+                    addJigsaw(jsonData.imgurl, '随机壁纸');
                 }
+                loadedCount++;
+                // 加一个 200ms 的延迟，防止瞬间并发过高被封
+                setTimeout(fetchOne, 200); 
+            },
+            error: function() {
+                loadedCount++;
+                setTimeout(fetchOne, 200); 
             }
-            resizeHeight(); 
-            jigsaw.ajaxing = false; 
-            if (!jsonData || !jsonData.data || jsonData.data.images.length === 0) { 
-                $("#loadmore").html('所有的壁纸都已经加载完啦！') 
-            } else { 
-                $("#loadmore").hide() 
-            } 
-        }, 
-        error: function() { 
-            jigsaw.ajaxing = false; 
-            $("#loadmore").html('加载失败，请检查网络或稍后重试'); 
-        } 
-    }); 
+        });
+    }
+    fetchOne();
     return true 
 } 
 
