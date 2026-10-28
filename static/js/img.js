@@ -1,5 +1,5 @@
-console["log"]("%c 韩小韩二次美化 https://www.vvhan.com %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-var seting = { apiUrl: "http://api.xcvts.cn/api/img/bizhi", ratio: 0.618, types: 1 }; 
+console["log"]("%c 极数本源壁纸系统重构 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+var seting = { apiUrl: "https://v1.apizero.cn/api/wallpaper", ratio: 0.618, types: '风景' }; 
 var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
@@ -22,7 +22,6 @@ function loadData(types, newload) {
         $("body").removeClass(); 
         $(".jigsaw").removeAttr("style") 
     } 
-    // 每次调用拉取 20 张图片
     ajaxWal(seting.types, 20) 
 } 
 
@@ -59,41 +58,37 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-// 针对小尘接口的并发请求逻辑
-function ajaxWal(cid, targetCount) { 
+function ajaxWal(cid, count) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    var loadedCount = 0;
-
-    function fetchOne() {
-        if (loadedCount >= targetCount) {
-            jigsaw.ajaxing = false;
-            $("#loadmore").hide();
-            return;
-        }
-        $.ajax({
-            type: "GET",
-            url: seting.apiUrl,
-            data: { msg: cid },
-            dataType: "json",
-            success: function (jsonData) {
-                // 小尘接口返回结构 {"code":200,"data":{"imgurl":"..."}}
-                if(jsonData && jsonData.data && jsonData.data.imgurl) {
-                    addJigsaw(jsonData.data.imgurl, '壁纸');
+    $.ajax({
+        type: "GET",
+        url: seting.apiUrl,
+        data: { category: cid, count: count },
+        dataType: "json",
+        success: function (jsonData) {
+            if (jsonData && jsonData.data && jsonData.data.images) {
+                var images = jsonData.data.images;
+                for (var i = 0; i < images.length; i++) {
+                    addJigsaw(images[i].url, images[i].tag_text || '壁纸');
                 }
-                loadedCount++;
-                fetchOne(); 
-            },
-            error: function() {
-                loadedCount++;
-                fetchOne();
             }
-        });
-    }
-    fetchOne();
+            resizeHeight(); 
+            jigsaw.ajaxing = false; 
+            if (!jsonData || !jsonData.data || jsonData.data.images.length === 0) { 
+                $("#loadmore").html('所有的壁纸都已经加载完啦！') 
+            } else { 
+                $("#loadmore").hide() 
+            } 
+        }, 
+        error: function() { 
+            jigsaw.ajaxing = false; 
+            $("#loadmore").html('加载失败，请检查网络或稍后重试'); 
+        } 
+    }); 
     return true 
 } 
 
