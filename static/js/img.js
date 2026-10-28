@@ -1,6 +1,5 @@
-console["log"]("%c 国内直连防墙版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-// 这是国内极其稳定的免费壁纸 API，直连无需代理
-var seting = { apiUrl: "https://uapis.cn/api/v1/random/image", ratio: 0.618, types: '风景' }; 
+console["log"]("%c 必应国内直连终版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+var seting = { ratio: 0.618, types: '风景' }; 
 var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
@@ -20,7 +19,7 @@ function loadData(types, newload) {
         jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
     } 
-    ajaxWal(seting.types, 12) 
+    ajaxWal(seting.types, 10) 
 } 
 
 resizeHeight(); 
@@ -58,44 +57,28 @@ function contAdd(html) {
 
 function ajaxWal(category, totalCount) { 
     if (jigsaw.ajaxing === true) return false; 
-    $("#loadmore").html('努力加载中……'); 
+    $("#loadmore").html('正在为您拉取高清壁纸...'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
-    
-    var loaded = 0;
-    
-    // UApi 接口，支持分类和 302 重定向，国内极速响应
-    var cat = "scenery"; // 默认风景
-    if (category === "美女" || category === "人物") cat = "beauty";
-    if (category === "动漫") cat = "anime";
-    if (category === "游戏") cat = "game";
-    if (category === "汽车") cat = "car";
-    if (category === "动物") cat = "animal";
 
-    function fetchNext() {
-        if (loaded >= totalCount) {
+    // 这里去掉了一切复杂的 ajax 和循环。直接拼接国内必应镜像的 img src
+    // 这个接口国内直接返回 302 重定向到真实的必应图片，不需要 JS 请求 JSON
+    var loopCount = 0;
+    var timer = setInterval(function() {
+        // 直接生成图片 URL，浏览器自动加载
+        var imgUrl = "https://bing.imgb.xyz/api/wallpaper?t=" + Date.now() + Math.random();
+        
+        // 直接插入 DOM
+        addJigsaw(imgUrl, category);
+        
+        loopCount++;
+        if (loopCount >= totalCount) {
+            clearInterval(timer);
             jigsaw.ajaxing = false;
             $("#loadmore").hide();
-            return;
         }
-        
-        // 直接请求国内接口，并拼上时间戳防止缓存
-        var imgUrl = "https://uapis.cn/api/v1/random/image?category=" + cat + "&type=pc&t=" + Math.random();
-        
-        // 预加载判断是否可用
-        var tempImg = new Image();
-        tempImg.onload = function() {
-            addJigsaw(imgUrl, category);
-            loaded++;
-            fetchNext(); 
-        };
-        tempImg.onerror = function() {
-            setTimeout(fetchNext, 100); 
-        };
-        tempImg.src = imgUrl;
-    }
+    }, 150); // 每 150 毫秒插入一张，防止浏览器卡顿
     
-    fetchNext();
     return true 
 } 
 
