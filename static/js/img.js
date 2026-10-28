@@ -1,6 +1,7 @@
-console["log"]("%c Wallhaven 终极稳定版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-var seting = { apiUrl: "https://wallhaven.cc/api/v1/search", ratio: 0.618, types: '风景' }; 
-var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
+console["log"]("%c 国内直连防墙版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+// 这是国内极其稳定的免费壁纸 API，直连无需代理
+var seting = { apiUrl: "https://uapis.cn/api/v1/random/image", ratio: 0.618, types: '风景' }; 
+var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
@@ -16,12 +17,10 @@ $(function () {
 function loadData(types, newload) { 
     if (types != seting.types || newload === true) { 
         seting.types = types; 
-        jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
+        jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
-    } else {
-        jigsaw.page++; // 滚动加载下一页
-    }
-    ajaxWal(seting.types, jigsaw.page) 
+    } 
+    ajaxWal(seting.types, 12) 
 } 
 
 resizeHeight(); 
@@ -57,53 +56,46 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(category, page) { 
+function ajaxWal(category, totalCount) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
+    
+    var loaded = 0;
+    
+    // UApi 接口，支持分类和 302 重定向，国内极速响应
+    var cat = "scenery"; // 默认风景
+    if (category === "美女" || category === "人物") cat = "beauty";
+    if (category === "动漫") cat = "anime";
+    if (category === "游戏") cat = "game";
+    if (category === "汽车") cat = "car";
+    if (category === "动物") cat = "animal";
 
-    // 分类映射：将中文转换为 Wallhaven 支持的英文
-    var keyword = "nature";
-    if (category === "美女" || category === "人物") keyword = "people";
-    if (category === "动漫") keyword = "anime";
-    if (category === "游戏") keyword = "games";
-    if (category === "汽车") keyword = "cars";
-    if (category === "动物") keyword = "animals";
-    if (category === "美食") keyword = "food";
-    if (category === "建筑") keyword = "buildings";
-    if (category === "简约") keyword = "minimalist";
-    if (category === "影视") keyword = "movies";
-    if (category === "星空") keyword = "space";
-
-    $.ajax({
-        type: "GET",
-        url: seting.apiUrl,
-        data: { 
-            q: keyword, 
-            page: page, 
-            categories: "111", // 常规分类
-            purity: "100",    // 安全级（过滤 NSFW）
-            sorting: "random" // 随机排序
-        },
-        dataType: "json",
-        success: function (jsonData) {
-            if (jsonData && jsonData.data && jsonData.data.length > 0) {
-                var images = jsonData.data;
-                for (var i = 0; i < images.length; i++) {
-                    // Wallhaven 的字段叫 path，且直接是完整 https 链接
-                    addJigsaw(images[i].path, category);
-                }
-            }
-            resizeHeight(); 
-            jigsaw.ajaxing = false; 
+    function fetchNext() {
+        if (loaded >= totalCount) {
+            jigsaw.ajaxing = false;
             $("#loadmore").hide();
-        }, 
-        error: function() { 
-            jigsaw.ajaxing = false; 
-            $("#loadmore").html('加载失败，请检查网络或稍后重试'); 
-        } 
-    }); 
+            return;
+        }
+        
+        // 直接请求国内接口，并拼上时间戳防止缓存
+        var imgUrl = "https://uapis.cn/api/v1/random/image?category=" + cat + "&type=pc&t=" + Math.random();
+        
+        // 预加载判断是否可用
+        var tempImg = new Image();
+        tempImg.onload = function() {
+            addJigsaw(imgUrl, category);
+            loaded++;
+            fetchNext(); 
+        };
+        tempImg.onerror = function() {
+            setTimeout(fetchNext, 100); 
+        };
+        tempImg.src = imgUrl;
+    }
+    
+    fetchNext();
     return true 
 } 
 
