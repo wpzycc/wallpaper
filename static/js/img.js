@@ -1,6 +1,6 @@
-console["log"]("%c 终极稳定壁纸系统 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-var seting = { ratio: 0.618, types: '风景' }; 
-var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
+console["log"]("%c Wallhaven 终极稳定版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+var seting = { apiUrl: "https://wallhaven.cc/api/v1/search", ratio: 0.618, types: '风景' }; 
+var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
@@ -16,14 +16,12 @@ $(function () {
 function loadData(types, newload) { 
     if (types != seting.types || newload === true) { 
         seting.types = types; 
-        jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
+        jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
-        $(".onepage-pagination").remove(); 
-        $("body").removeClass(); 
-        $(".jigsaw").removeAttr("style") 
-    } 
-    // 每次加载 12 张图
-    ajaxWal(seting.types, 12) 
+    } else {
+        jigsaw.page++; // 滚动加载下一页
+    }
+    ajaxWal(seting.types, jigsaw.page) 
 } 
 
 resizeHeight(); 
@@ -59,53 +57,53 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(category, totalCount) { 
+function ajaxWal(category, page) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    var loaded = 0;
-    
-    // 将中文分类映射为 Unsplash 的英文关键词
+    // 分类映射：将中文转换为 Wallhaven 支持的英文
     var keyword = "nature";
     if (category === "美女" || category === "人物") keyword = "people";
     if (category === "动漫") keyword = "anime";
-    if (category === "游戏") keyword = "gaming";
-    if (category === "汽车") keyword = "car";
-    if (category === "动物") keyword = "animal";
+    if (category === "游戏") keyword = "games";
+    if (category === "汽车") keyword = "cars";
+    if (category === "动物") keyword = "animals";
     if (category === "美食") keyword = "food";
-    if (category === "建筑") keyword = "architecture";
+    if (category === "建筑") keyword = "buildings";
     if (category === "简约") keyword = "minimalist";
-    if (category === "影视") keyword = "movie";
+    if (category === "影视") keyword = "movies";
     if (category === "星空") keyword = "space";
 
-    function fetchNext() {
-        if (loaded >= totalCount) {
-            jigsaw.ajaxing = false;
+    $.ajax({
+        type: "GET",
+        url: seting.apiUrl,
+        data: { 
+            q: keyword, 
+            page: page, 
+            categories: "111", // 常规分类
+            purity: "100",    // 安全级（过滤 NSFW）
+            sorting: "random" // 随机排序
+        },
+        dataType: "json",
+        success: function (jsonData) {
+            if (jsonData && jsonData.data && jsonData.data.length > 0) {
+                var images = jsonData.data;
+                for (var i = 0; i < images.length; i++) {
+                    // Wallhaven 的字段叫 path，且直接是完整 https 链接
+                    addJigsaw(images[i].path, category);
+                }
+            }
+            resizeHeight(); 
+            jigsaw.ajaxing = false; 
             $("#loadmore").hide();
-            return;
-        }
-        
-        // 使用 Unsplash 的随机图源，1920x1080 尺寸，并加上随机种子防止缓存
-        var randomSeed = Math.floor(Math.random() * 999999);
-        var imgUrl = "https://source.unsplash.com/1920x1080/?" + keyword + "&sig=" + randomSeed;
-        
-        // 预加载测试图片是否有效
-        var tempImg = new Image();
-        tempImg.onload = function() {
-            addJigsaw(imgUrl, keyword);
-            loaded++;
-            fetchNext(); // 成功则立刻下一张
-        };
-        tempImg.onerror = function() {
-            // 如果这张图挂了，跳过它，立刻重试下一张（不增加 loaded 计数，确保凑够 12 张）
-            setTimeout(fetchNext, 100); 
-        };
-        tempImg.src = imgUrl;
-    }
-    
-    fetchNext();
+        }, 
+        error: function() { 
+            jigsaw.ajaxing = false; 
+            $("#loadmore").html('加载失败，请检查网络或稍后重试'); 
+        } 
+    }); 
     return true 
 } 
 
