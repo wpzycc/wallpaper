@@ -4,8 +4,11 @@ const FormData = require('form-data');
 
 const UPLOAD_API = 'https://img.wpzy.cc/upload';
 const DATA_FILE = 'data.json';
-// 【核心修改】每个分类限制存 150 张图（12个分类 x 150 = 1800张）
+
+// 总量限制：150 × 12 = 1800 张
 const MAX_IMAGES_PER_CATEGORY = 150; 
+// 每天限制：15 × 12 = 180 张
+const DAILY_UPDATE_LIMIT = 15; 
 
 const categories = {
   "36": "4k", "6": "people", "30": "love", "9": "nature",
@@ -15,63 +18,51 @@ const categories = {
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-async function fetchWallhaven(keyword) {
-  try {
-    const res = await axios.get(`https://wallhaven.cc/api/v1/search?q=${keyword}&categories=111&purity=100&sorting=random&page=1`, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
-      timeout: 15000 
-    });
-    return res.data.data;
-  } catch (e) {
-    console.log(`获取 Wallhaven [${keyword}] 失败:`, e.message);
-    return [];
-  }
-}
-
-async function uploadToWpzy(imageUrl) {
-  try {
-    const imgRes = await axios.get(imageUrl, { 
-      responseType: 'arraybuffer',
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': 'https://wallhaven.cc/',
-        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
-      },
-      timeout: 20000 
-    });
-    
-    const buffer = Buffer.from(imgRes.data, 'binary');
-    const formData = new FormData();
-    formData.append('file', buffer, { filename: 'wallpaper.jpg' });
-
-    const uploadRes = await axios.post(UPLOAD_API, formData, {
-      headers: {
-        ...formData.getHeaders(),
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Origin': 'https://bizhi.wpzy.cc',
-        'Referer': 'https://bizhi.wpzy.cc/'
-      },
-      timeout: 30000 
-    });
-
-    if (uploadRes.data && uploadRes.data.success && uploadRes.data.data && uploadRes.data.data.link) {
-      let finalUrl = uploadRes.data.data.link;
-      if (finalUrl.includes('i.imgur.com')) {
-          finalUrl = finalUrl.replace('https://i.imgur.com', 'https://img.wpzy.cc/v2');
-      }
+// 【修复1】增加重试机制，防止单张图网络抖动导致全盘崩溃
+async function uploadToWpzy(imageUrl, retries = 3) {
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      const imgRes = await axios.get(imageUrl, { 
+        responseType: 'arraybuffer',
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Referer': 'https://wallhaven.cc/'
+        },
+        timeout: 20000 
+      });
       
-      try {
-        await axios.head(finalUrl, { timeout: 5000 });
-        return finalUrl; 
-      } catch (verifyError) {
-        console.log(`❌ 链接校验失败(不存在): ${finalUrl}`);
-        return null; 
+      const buffer = Buffer.from(imgRes.data, 'binary');
+      const formData = new FormData();
+      formData.append('file', buffer, { filename: 'wallpaper.jpg' });
+
+      const uploadRes = await axios.post(UPLOAD_API, formData, {
+        headers: {
+          ...formData.getHeaders(),
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Origin': 'https://bizhi.wpzy.cc',
+          'Referer': 'https://bizhi.wpzy.cc/'
+        },
+        timeout: 30000 
+      });
+
+      if (uploadRes.data && uploadRes.data.success && uploadRes.data.data && uploadRes.data.data.link) {
+        let finalUrl = uploadRes.data.data.link;
+        if (finalUrl.includes('i.imgur.com')) {
+            finalUrl = finalUrl.replace('https://i.imgur.com', 'https://img.wpzy.cc/v2');
+        }
+        
+        try {
+          await axios.head(finalUrl, { timeout: 5000 });
+          return finalUrl; 
+        } catch (e) {
+          return null; 
+        }
       }
+      return null;
+    } catch (e) {
+      if (attempt === retries) return null; 
+      await sleep(3000); // 失败后等 3 秒重试
     }
-    return null; 
-  } catch (e) {
-    console.log(`上传失败: ${imageUrl}, 错误: ${e.message}`);
-    return null;
   }
 }
 
@@ -84,37 +75,44 @@ async function main() {
   let newData = { ...existingData };
 
   for (const cid in categories) {
-    console.log(`\n=========== 正在处理分类: ${cid} ===========`);
     if (!newData[cid]) newData[cid] = [];
+    console.log(`\n正在处理分类: ${cid}`);
 
-    // 【核心修改】如果满了，就删掉最老的数据（队列头部）
+    // 满了后清理最早的图
     while (newData[cid].length >= MAX_IMAGES_PER_CATEGORY) {
-      const removed = newData[cid].shift(); // 移除并获取第一条（最老的）
-      console.log(`分类 ${cid} 已满 ${MAX_IMAGES_PER_CATEGORY} 张，清理最老数据: ${removed.id}`);
+      newData[cid].shift(); 
     }
 
-    const images = await fetchWallhaven(categories[cid]);
-    const needCount = MAX_IMAGES_PER_CATEGORY - newData[cid].length;
-    const fetchCount = Math.min(needCount, images.length);
+    let images = [];
+    try {
+      const res = await axios.get(`https://wallhaven.cc/api/v1/search?q=${categories[cid]}&categories=111&purity=100&sorting=random&page=1`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        timeout: 20000 
+      });
+      images = res.data.data;
+    } catch (e) {
+      console.log(`获取列表失败: ${e.message}`);
+      continue;
+    }
+    
+    // 每天严格只更新 15 张
+    const fetchCount = Math.min(DAILY_UPDATE_LIMIT, images.length);
 
     for (let i = 0; i < fetchCount; i++) {
       const img = images[i];
-      
       if (newData[cid].some(item => item.id === img.id)) continue;
 
       console.log(`正在上传: ${img.path}`);
       const newUrl = await uploadToWpzy(img.path);
 
       if (newUrl) {
-        newData[cid].push({
-          id: img.id,
-          url: newUrl
-        });
-        console.log(`✅ 校验成功，已保存: ${newUrl}`);
+        newData[cid].push({ id: img.id, url: newUrl });
+        console.log(`✅ 成功: ${newUrl}`);
       } else {
-        console.log(`❌ 上传或校验失败，跳过此图`);
+        console.log(`❌ 失败，跳过`);
       }
-
+      
+      // 【绝对保证 10 秒】
       await sleep(10000); 
     }
   }
