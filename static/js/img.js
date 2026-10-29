@@ -1,6 +1,5 @@
-// 纯前端直连国内镜像接口，无需任何代理
-var seting = { apiUrl: "https://api.wallhaven.cc/api/v1/search", ratio: 0.618, types: 36 }; 
-var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
+var seting = { ratio: 0.618, types: 36 }; 
+var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
@@ -16,12 +15,10 @@ $(function () {
 function loadData(types, newload) { 
     if (types != seting.types || newload === true) { 
         seting.types = types; 
-        jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
+        jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
-    } else {
-        jigsaw.page++; 
-    }
-    ajaxWal(seting.types, jigsaw.page) 
+    } 
+    ajaxWal(seting.types, 12) 
 } 
 
 resizeHeight(); 
@@ -35,8 +32,8 @@ function resizeHeight() {
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
     
-    // 因为这是国内镜像接口，直接返回的就是能访问的图片链接
-    var safeImg = img;
+    // 使用图片中转，确保能加载出来
+    var safeImg = "https://images.weserv.nl/?url=" + encodeURIComponent(img);
 
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
@@ -61,48 +58,40 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(cid, page) { 
+function ajaxWal(category, totalCount) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    // 把你 HTML 里的数字分类，翻译成英文
-    var keyword = "nature";
-    if (cid == 6 || cid == 30) keyword = "people";
-    if (cid == 26) keyword = "anime";
-    if (cid == 5) keyword = "games";
-    if (cid == 12) keyword = "cars";
-    if (cid == 14) keyword = "animals";
-    if (cid == 29) keyword = "calendar";
-    if (cid == 36) keyword = "4k";
-    if (cid == 9) keyword = "nature";
-    if (cid == 15) keyword = "minimalist";
-    if (cid == 11) keyword = "fashion";
-    if (cid == 10) keyword = "fashion";
-
-    $.ajax({
-        type: "GET",
-        url: seting.apiUrl,
-        data: { q: keyword, page: page }, 
-        dataType: "json",
-        success: function (jsonData) {
-            if (jsonData && jsonData.data && jsonData.data.length > 0) {
-                var images = jsonData.data;
-                for (var i = 0; i < images.length; i++) {
-                    // Wallhaven 的图片字段叫 path
-                    addJigsaw(images[i].path, "壁纸");
-                }
-            }
-            resizeHeight(); 
-            jigsaw.ajaxing = false; 
+    var loaded = 0;
+    // 直接写死 Wallhaven 的官方直链规则，用随机种子防缓存
+    function fetchNext() {
+        if (loaded >= totalCount) {
+            jigsaw.ajaxing = false;
             $("#loadmore").hide();
-        }, 
-        error: function() { 
-            jigsaw.ajaxing = false; 
-            $("#loadmore").html('加载失败，请稍后重试'); 
-        } 
-    }); 
+            return;
+        }
+        
+        // 随机图片地址 (Wallhaven 官方 CDN 直链)
+        var randomId = Math.random().toString(36).substring(2, 8);
+        var imgUrl = "https://w.wallhaven.cc/full/" + randomId.substring(0, 2) + "/wallhaven-" + randomId + ".jpg";
+        
+        // 尝试加载，如果加载成功就塞进去
+        var tempImg = new Image();
+        tempImg.onload = function() {
+            addJigsaw(imgUrl, category);
+            loaded++;
+            fetchNext(); 
+        };
+        tempImg.onerror = function() {
+            // 如果这个随机地址没图（404），重新随机拉下一个，不增加成功计数
+            fetchNext(); 
+        };
+        tempImg.src = "https://images.weserv.nl/?url=" + encodeURIComponent(imgUrl);
+    }
+    
+    fetchNext();
     return true 
 } 
 
