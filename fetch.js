@@ -4,7 +4,8 @@ const FormData = require('form-data');
 
 const UPLOAD_API = 'https://img.wpzy.cc/upload';
 const DATA_FILE = 'data.json';
-const MAX_IMAGES_PER_CATEGORY = 15; 
+// 【核心修改】每个分类限制存 150 张图（12个分类 x 150 = 1800张）
+const MAX_IMAGES_PER_CATEGORY = 150; 
 
 const categories = {
   "36": "4k", "6": "people", "30": "love", "9": "nature",
@@ -53,21 +54,18 @@ async function uploadToWpzy(imageUrl) {
       timeout: 30000 
     });
 
-    // 判断接口返回的格式
     if (uploadRes.data && uploadRes.data.success && uploadRes.data.data && uploadRes.data.data.link) {
       let finalUrl = uploadRes.data.data.link;
-      // 根据你的图床规则，替换为真实代理路径
       if (finalUrl.includes('i.imgur.com')) {
           finalUrl = finalUrl.replace('https://i.imgur.com', 'https://img.wpzy.cc/v2');
       }
       
-      // 【核心新增】强制校验真实链接是否能访问，防止假链接混入
       try {
         await axios.head(finalUrl, { timeout: 5000 });
-        return finalUrl; // 校验通过，返回真实链接
+        return finalUrl; 
       } catch (verifyError) {
         console.log(`❌ 链接校验失败(不存在): ${finalUrl}`);
-        return null; // 校验不通过，直接抛弃
+        return null; 
       }
     }
     return null; 
@@ -89,9 +87,10 @@ async function main() {
     console.log(`\n=========== 正在处理分类: ${cid} ===========`);
     if (!newData[cid]) newData[cid] = [];
 
-    if (newData[cid].length >= MAX_IMAGES_PER_CATEGORY) {
-      console.log(`分类 ${cid} 已满 ${MAX_IMAGES_PER_CATEGORY} 张，跳过。`);
-      continue;
+    // 【核心修改】如果满了，就删掉最老的数据（队列头部）
+    while (newData[cid].length >= MAX_IMAGES_PER_CATEGORY) {
+      const removed = newData[cid].shift(); // 移除并获取第一条（最老的）
+      console.log(`分类 ${cid} 已满 ${MAX_IMAGES_PER_CATEGORY} 张，清理最老数据: ${removed.id}`);
     }
 
     const images = await fetchWallhaven(categories[cid]);
@@ -101,13 +100,11 @@ async function main() {
     for (let i = 0; i < fetchCount; i++) {
       const img = images[i];
       
-      // 检查 ID 是否已存在（去重）
       if (newData[cid].some(item => item.id === img.id)) continue;
 
       console.log(`正在上传: ${img.path}`);
       const newUrl = await uploadToWpzy(img.path);
 
-      // 只有真实有效的链接才会被存进去
       if (newUrl) {
         newData[cid].push({
           id: img.id,
@@ -118,7 +115,6 @@ async function main() {
         console.log(`❌ 上传或校验失败，跳过此图`);
       }
 
-      // 强制休息 10 秒防封禁
       await sleep(10000); 
     }
   }
