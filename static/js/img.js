@@ -1,4 +1,5 @@
-var seting = { apiUrl: "./wallhaven", ratio: 0.618, types: '风景' }; 
+// 纯前端直连国内镜像接口，无需任何代理
+var seting = { apiUrl: "https://api.wallhaven.cc/api/v1/search", ratio: 0.618, types: 36 }; 
 var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
@@ -34,8 +35,8 @@ function resizeHeight() {
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
     
-    // 核心：用国内不墙的图片 CDN 代理 Wallhaven 的原图
-    var safeImg = "https://images.weserv.nl/?url=" + encodeURIComponent(img);
+    // 因为这是国内镜像接口，直接返回的就是能访问的图片链接
+    var safeImg = img;
 
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
@@ -60,36 +61,37 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(category, page) { 
+function ajaxWal(cid, page) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    // 把你 HTML 里的中文分类，完美翻译成 Wallhaven 的英文搜索词
+    // 把你 HTML 里的数字分类，翻译成英文
     var keyword = "nature";
-    if (category === "美女" || category === "人物") keyword = "people";
-    if (category === "动漫") keyword = "anime";
-    if (category === "游戏") keyword = "games";
-    if (category === "汽车") keyword = "cars";
-    if (category === "动物") keyword = "animals";
-    if (category === "美食") keyword = "food";
-    if (category === "建筑") keyword = "buildings";
-    if (category === "简约") keyword = "minimalist";
-    if (category === "影视") keyword = "movies";
-    if (category === "星空") keyword = "space";
+    if (cid == 6 || cid == 30) keyword = "people";
+    if (cid == 26) keyword = "anime";
+    if (cid == 5) keyword = "games";
+    if (cid == 12) keyword = "cars";
+    if (cid == 14) keyword = "animals";
+    if (cid == 29) keyword = "calendar";
+    if (cid == 36) keyword = "4k";
+    if (cid == 9) keyword = "nature";
+    if (cid == 15) keyword = "minimalist";
+    if (cid == 11) keyword = "fashion";
+    if (cid == 10) keyword = "fashion";
 
     $.ajax({
         type: "GET",
-        url: seting.apiUrl, // 这里请求的是你自己的 functions/wallhaven.js
-        data: { q: keyword, page: page },
+        url: seting.apiUrl,
+        data: { q: keyword, page: page }, 
         dataType: "json",
         success: function (jsonData) {
             if (jsonData && jsonData.data && jsonData.data.length > 0) {
                 var images = jsonData.data;
                 for (var i = 0; i < images.length; i++) {
                     // Wallhaven 的图片字段叫 path
-                    addJigsaw(images[i].path, category);
+                    addJigsaw(images[i].path, "壁纸");
                 }
             }
             resizeHeight(); 
