@@ -1,6 +1,7 @@
-console["log"]("%c 必应国内直连终版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-var seting = { ratio: 0.618, types: '风景' }; 
-var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
+console["log"]("%c Wallhaven 官方代理版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
+// 请求我们刚才自己写的 CF Functions 代理，同源请求，不会被墙
+var seting = { apiUrl: "./wallhaven", ratio: 0.618, types: '风景' }; 
+var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
@@ -16,10 +17,12 @@ $(function () {
 function loadData(types, newload) { 
     if (types != seting.types || newload === true) { 
         seting.types = types; 
-        jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
+        jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
-    } 
-    ajaxWal(seting.types, 10) 
+    } else {
+        jigsaw.page++; // 滚动加载下一页
+    }
+    ajaxWal(seting.types, jigsaw.page) 
 } 
 
 resizeHeight(); 
@@ -55,30 +58,47 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(category, totalCount) { 
+function ajaxWal(category, page) { 
     if (jigsaw.ajaxing === true) return false; 
-    $("#loadmore").html('正在为您拉取高清壁纸...'); 
+    $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    // 这里去掉了一切复杂的 ajax 和循环。直接拼接国内必应镜像的 img src
-    // 这个接口国内直接返回 302 重定向到真实的必应图片，不需要 JS 请求 JSON
-    var loopCount = 0;
-    var timer = setInterval(function() {
-        // 直接生成图片 URL，浏览器自动加载
-        var imgUrl = "https://bing.imgb.xyz/api/wallpaper?t=" + Date.now() + Math.random();
-        
-        // 直接插入 DOM
-        addJigsaw(imgUrl, category);
-        
-        loopCount++;
-        if (loopCount >= totalCount) {
-            clearInterval(timer);
-            jigsaw.ajaxing = false;
+    // 中文转 Wallhaven 支持的英文关键词
+    var keyword = "nature";
+    if (category === "美女" || category === "人物") keyword = "people";
+    if (category === "动漫") keyword = "anime";
+    if (category === "游戏") keyword = "games";
+    if (category === "汽车") keyword = "cars";
+    if (category === "动物") keyword = "animals";
+    if (category === "美食") keyword = "food";
+    if (category === "建筑") keyword = "buildings";
+    if (category === "简约") keyword = "minimalist";
+    if (category === "影视") keyword = "movies";
+    if (category === "星空") keyword = "space";
+
+    $.ajax({
+        type: "GET",
+        url: seting.apiUrl,
+        data: { q: keyword, page: page },
+        dataType: "json",
+        success: function (jsonData) {
+            if (jsonData && jsonData.data && jsonData.data.length > 0) {
+                var images = jsonData.data;
+                for (var i = 0; i < images.length; i++) {
+                    // Wallhaven 的图片字段是 path
+                    addJigsaw(images[i].path, category);
+                }
+            }
+            resizeHeight(); 
+            jigsaw.ajaxing = false; 
             $("#loadmore").hide();
-        }
-    }, 150); // 每 150 毫秒插入一张，防止浏览器卡顿
-    
+        }, 
+        error: function() { 
+            jigsaw.ajaxing = false; 
+            $("#loadmore").html('加载失败，请稍后重试'); 
+        } 
+    }); 
     return true 
 } 
 
