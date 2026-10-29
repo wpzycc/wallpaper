@@ -1,5 +1,4 @@
-console["log"]("%c Wallhaven 官方代理版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
-// 请求我们刚才自己写的 CF Functions 代理，同源请求，不会被墙
+console["log"]("%c Wallhaven 无损代理版 %c", "color: #fadfa3; background: #030307; padding:5px", "background: #fadfa3; padding:5px");
 var seting = { apiUrl: "./wallhaven", ratio: 0.618, types: '风景' }; 
 var jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
 
@@ -20,7 +19,7 @@ function loadData(types, newload) {
         jigsaw = { count: 0, page: 1, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
     } else {
-        jigsaw.page++; // 滚动加载下一页
+        jigsaw.page++; 
     }
     ajaxWal(seting.types, jigsaw.page) 
 } 
@@ -35,19 +34,23 @@ function resizeHeight() {
 
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
+    
+    // 【核心修改点】套上国内能直连的图片代理 CDN
+    var safeImg = "https://images.weserv.nl/?url=" + encodeURIComponent(img);
+
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div></div>'; 
+        newHtml = '<div class="Hhalf oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div></div>'; 
         contAdd(jigsaw.halfHtml + newHtml); jigsaw.halfHtml = ''; return true 
     } 
     if (((jigsaw.count - 1) % 5) === 0) { jigsaw.loadBig = false } 
     if ((jigsaw.loadBig === false) && ((Math.floor(Math.random() * 3) === 0) || ((jigsaw.count % 5) === 0))) { 
         imgWidth = parseInt(screen.width / 2); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="item half oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
+        newHtml = '<div class="item half oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
         contAdd(newHtml); jigsaw.loadBig = true; return true 
     } 
     imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
+    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
     return true 
 } 
 
@@ -64,7 +67,6 @@ function ajaxWal(category, page) {
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    // 中文转 Wallhaven 支持的英文关键词
     var keyword = "nature";
     if (category === "美女" || category === "人物") keyword = "people";
     if (category === "动漫") keyword = "anime";
@@ -86,7 +88,6 @@ function ajaxWal(category, page) {
             if (jsonData && jsonData.data && jsonData.data.length > 0) {
                 var images = jsonData.data;
                 for (var i = 0; i < images.length; i++) {
-                    // Wallhaven 的图片字段是 path
                     addJigsaw(images[i].path, category);
                 }
             }
