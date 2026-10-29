@@ -1,13 +1,12 @@
-// 使用国内极速壁纸接口，直接前端请求，稳定不卡
-var seting = { apiUrl: "https://api.vvhan.com/api/wallpaper/360", ratio: 0.618, types: 36 }; 
+var seting = { apiUrl: "./data.json", ratio: 0.618, types: 36 }; 
 var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
 
-// 彻底移除滚动到底部重新洗牌的逻辑，避免白屏闪烁
+// 【治疗白屏】彻底删掉了滑到底部清空重载的代码，防止页面直接变白
 $(function () { 
-    // 保持静默
+    // 不再监听滚动清空
 }); 
 
 function loadData(types, newload) { 
@@ -30,7 +29,7 @@ function resizeHeight() {
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
 
-    // 强制固定宽高比例，防止滚动时页面跳动闪烁
+    // 【治疗跳动】强制用 style 固定图片宽高，防止未加载时高度塌陷引起乱跳
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
         newHtml = '<div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div></div>'; 
@@ -51,7 +50,7 @@ function contAdd(html) {
     var myBox = $("#walBox"); 
     var $newHtml = $(html); 
     myBox.append($newHtml); 
-    // 去掉动画，直接加载
+    // 【治疗闪烁】把 effect: 'fadeIn' 删掉，不要淡入特效
     $("img", $newHtml).lazyload({ threshold: 200 }) 
 } 
 
@@ -63,15 +62,14 @@ function ajaxWal(cid) {
 
     $.ajax({
         type: "GET",
-        url: seting.apiUrl,
-        // 这个接口直接用 cid 和 type 拉取
-        data: { type: 'pc', cid: cid },
+        url: seting.apiUrl, // 依然读你的 data.json
         dataType: "json",
         success: function (jsonData) {
-            if (jsonData && jsonData.data && jsonData.data.length > 0) {
-                var images = jsonData.data;
+            if (jsonData && jsonData[cid] && jsonData[cid].length > 0) {
+                var images = jsonData[cid];
+                images.sort(function() { return 0.5 - Math.random() }); 
+                
                 for (var i = 0; i < images.length; i++) {
-                    // 韩小韩接口返回的是 url 字段
                     addJigsaw(images[i].url, "壁纸");
                 }
             } else {
@@ -83,7 +81,7 @@ function ajaxWal(cid) {
         }, 
         error: function() { 
             jigsaw.ajaxing = false; 
-            $("#loadmore").html('加载失败，请刷新重试'); 
+            $("#loadmore").html('data.json 加载失败'); 
         } 
     }); 
     return true 
