@@ -1,4 +1,4 @@
-var seting = { ratio: 0.618, types: 36 }; 
+var seting = { apiUrl: "./data.json", ratio: 0.618, types: 36 }; 
 var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
 
 window.onresize = function () { resizeHeight() }; 
@@ -7,7 +7,10 @@ window.onload = function () { loadData(seting.types, true); resizeHeight() };
 $(function () { 
     $(window).scroll(function () { 
         if ($(this).scrollTop() + $(window).height() + 20 >= $(document).height() && $(this).scrollTop() > 20) { 
-            loadData(seting.types, false) 
+            // 静态 JSON 只有十几张图，滑到底部打乱重新排
+            $("#walBox").html(''); 
+            jigsaw.count = 0; 
+            loadData(seting.types, true); 
         } 
     }) 
 }); 
@@ -18,10 +21,11 @@ function loadData(types, newload) {
         jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false }; 
         $("#walBox").html(''); 
     } 
-    ajaxWal(seting.types, 12) 
+    ajaxWal(seting.types) 
 } 
 
 resizeHeight(); 
+
 function resizeHeight() { 
     var newHeight = $("#walBox").width() * (seting.ratio / 2); 
     $(".jigsaw .item").css('height', newHeight); 
@@ -31,23 +35,20 @@ function resizeHeight() {
 
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
-    
-    // 使用图片中转，确保能加载出来
-    var safeImg = "https://images.weserv.nl/?url=" + encodeURIComponent(img);
 
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="Hhalf oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div></div>'; 
+        newHtml = '<div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div></div>'; 
         contAdd(jigsaw.halfHtml + newHtml); jigsaw.halfHtml = ''; return true 
     } 
     if (((jigsaw.count - 1) % 5) === 0) { jigsaw.loadBig = false } 
     if ((jigsaw.loadBig === false) && ((Math.floor(Math.random() * 3) === 0) || ((jigsaw.count % 5) === 0))) { 
         imgWidth = parseInt(screen.width / 2); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="item half oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
+        newHtml = '<div class="item half oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
         contAdd(newHtml); jigsaw.loadBig = true; return true 
     } 
     imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + safeImg + '" data-fancybox="images"><img src="' + safeImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
+    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg"></a></div>'; 
     return true 
 } 
 
@@ -58,40 +59,38 @@ function contAdd(html) {
     $("img", $newHtml).lazyload({ effect: 'fadeIn', threshold: 200 }) 
 } 
 
-function ajaxWal(category, totalCount) { 
+function ajaxWal(cid) { 
     if (jigsaw.ajaxing === true) return false; 
     $("#loadmore").html('努力加载中……'); 
     $("#loadmore").show(); 
     jigsaw.ajaxing = true; 
 
-    var loaded = 0;
-    // 直接写死 Wallhaven 的官方直链规则，用随机种子防缓存
-    function fetchNext() {
-        if (loaded >= totalCount) {
-            jigsaw.ajaxing = false;
+    $.ajax({
+        type: "GET",
+        url: seting.apiUrl,
+        dataType: "json",
+        success: function (jsonData) {
+            if (jsonData && jsonData[cid] && jsonData[cid].length > 0) {
+                var images = jsonData[cid];
+                // 打乱顺序，让每次看起来都不一样
+                images.sort(function() { return 0.5 - Math.random() }); 
+                
+                for (var i = 0; i < images.length; i++) {
+                    // 直接使用图床返回的 url
+                    addJigsaw(images[i].url, "壁纸");
+                }
+            } else {
+                $("#loadmore").html('该分类暂无数据，请等待明日自动更新');
+            }
+            resizeHeight(); 
+            jigsaw.ajaxing = false; 
             $("#loadmore").hide();
-            return;
-        }
-        
-        // 随机图片地址 (Wallhaven 官方 CDN 直链)
-        var randomId = Math.random().toString(36).substring(2, 8);
-        var imgUrl = "https://w.wallhaven.cc/full/" + randomId.substring(0, 2) + "/wallhaven-" + randomId + ".jpg";
-        
-        // 尝试加载，如果加载成功就塞进去
-        var tempImg = new Image();
-        tempImg.onload = function() {
-            addJigsaw(imgUrl, category);
-            loaded++;
-            fetchNext(); 
-        };
-        tempImg.onerror = function() {
-            // 如果这个随机地址没图（404），重新随机拉下一个，不增加成功计数
-            fetchNext(); 
-        };
-        tempImg.src = "https://images.weserv.nl/?url=" + encodeURIComponent(imgUrl);
-    }
-    
-    fetchNext();
+        }, 
+        error: function() { 
+            jigsaw.ajaxing = false; 
+            $("#loadmore").html('data.json 加载失败，请检查根目录是否存在该文件'); 
+        } 
+    }); 
     return true 
 } 
 
