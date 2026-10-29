@@ -4,7 +4,7 @@ const FormData = require('form-data');
 
 const UPLOAD_API = 'https://img.wpzy.cc/upload';
 const DATA_FILE = 'data.json';
-const MAX_IMAGES_PER_CATEGORY = 15; // 每个分类存15张
+const MAX_IMAGES_PER_CATEGORY = 15; 
 
 const categories = {
   "36": "4k", "6": "people", "30": "love", "9": "nature",
@@ -17,39 +17,53 @@ const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 async function fetchWallhaven(keyword) {
   try {
     const res = await axios.get(`https://wallhaven.cc/api/v1/search?q=${keyword}&categories=111&purity=100&sorting=random&page=1`, {
-      headers: { 'User-Agent': 'Mozilla/5.0' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' },
+      timeout: 15000 
     });
     return res.data.data;
   } catch (e) {
+    console.log(`获取 Wallhaven [${keyword}] 失败:`, e.message);
     return [];
   }
 }
 
 async function uploadToWpzy(imageUrl) {
   try {
-    // 1. 下载图片为二进制流
-    const imgRes = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+    // 【核心修改1】下载图片时，加上 Referer 伪装
+    const imgRes = await axios.get(imageUrl, { 
+      responseType: 'arraybuffer',
+      headers: { 
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer': 'https://wallhaven.cc/', // 欺骗 Wallhaven 是从官网点进来的
+        'Accept': 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8'
+      },
+      timeout: 20000 
+    });
+    
     const buffer = Buffer.from(imgRes.data, 'binary');
 
-    // 2. 组装 FormData
     const formData = new FormData();
     formData.append('file', buffer, { filename: 'wallpaper.jpg' });
 
-    // 3. 发送给你的图床接口
     const uploadRes = await axios.post(UPLOAD_API, formData, {
-      headers: formData.getHeaders()
+      headers: {
+        ...formData.getHeaders(),
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Origin': 'https://bizhi.wpzy.cc',
+        'Referer': 'https://bizhi.wpzy.cc/'
+      },
+      timeout: 30000 
     });
 
-    // 4. 解析你接口返回的链接（根据你的脚本，返回格式是 { success: true, data: { link: '...' } }）
     if (uploadRes.data && uploadRes.data.success && uploadRes.data.data && uploadRes.data.data.link) {
       const imgurUrl = uploadRes.data.data.link;
-      // 替换为你自己图床的代理地址
+      // 如果你的图床直接返回了链接，这里就不替换了；如果之前是因为替换导致裂图，请去掉 .replace
       return imgurUrl.replace('https://i.imgur.com', 'https://img.wpzy.cc/v2');
     }
-    return imageUrl; // 如果失败，兜底用原图
+    return null; 
   } catch (e) {
-    console.error(`上传失败: ${imageUrl}`, e.message);
-    return imageUrl;
+    console.log(`上传失败: ${imageUrl}, 错误: ${e.message}`);
+    return null;
   }
 }
 
@@ -62,11 +76,11 @@ async function main() {
   let newData = { ...existingData };
 
   for (const cid in categories) {
-    console.log(`处理分类: ${cid}`);
+    console.log(`\n=========== 正在处理分类: ${cid} ===========`);
     if (!newData[cid]) newData[cid] = [];
 
     if (newData[cid].length >= MAX_IMAGES_PER_CATEGORY) {
-      console.log(`分类 ${cid} 已满，跳过。`);
+      console.log(`分类 ${cid} 已满 ${MAX_IMAGES_PER_CATEGORY} 张，跳过。`);
       continue;
     }
 
@@ -79,21 +93,26 @@ async function main() {
       const isExist = newData[cid].some(item => item.id === img.id);
       if (isExist) continue;
 
-      console.log(`正在上传图片: ${img.path}`);
+      console.log(`正在上传第 ${newData[cid].length + 1} 张: ${img.path}`);
       const newUrl = await uploadToWpzy(img.path);
 
-      newData[cid].push({
-        id: img.id,
-        url: newUrl
-      });
+      if (newUrl) {
+        newData[cid].push({
+          id: img.id,
+          url: newUrl
+        });
+        console.log(`✅ 上传成功: ${newUrl}`);
+      } else {
+        console.log(`❌ 上传失败，跳过此图`);
+      }
 
-      // 【关键】每传完一张停 5 秒，绝对不触发你的接口频控
-      await sleep(5000);
+      // 【核心修改2】把延迟从 3 秒改成 10 秒，极大降低被 429 的概率
+      await sleep(10000); 
     }
   }
 
   fs.writeFileSync(DATA_FILE, JSON.stringify(newData, null, 2));
-  console.log('全部完成！');
+  console.log('\n🎉 全部完成！已保存到 data.json');
 }
 
 main();
