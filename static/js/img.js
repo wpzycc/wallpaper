@@ -4,10 +4,7 @@ var jigsaw = { count: 0, halfHtml: '', loadBig: false, ajaxing: false };
 window.onresize = function () { resizeHeight() }; 
 window.onload = function () { loadData(seting.types, true); resizeHeight() }; 
 
-// 【治疗白屏】彻底删掉了滑到底部清空重载的代码，防止页面直接变白
-$(function () { 
-    // 不再监听滚动清空
-}); 
+$(function () { }); 
 
 function loadData(types, newload) { 
     if (types != seting.types || newload === true) { 
@@ -26,23 +23,35 @@ function resizeHeight() {
     return true 
 } 
 
+// 【核心功能】把原图变成缩略图
+function getThumbUrl(url) {
+    if (url.includes('img.wpzy.cc/v2/')) {
+        // 匹配末尾的 .jpeg .jpg .png，替换成 m.jpeg
+        return url.replace(/\.(jpeg|jpg|png)$/i, 'm.$1');
+    }
+    return url;
+}
+
 function addJigsaw(img, alt) { 
     var newHtml; var imgWidth, imgHeight; jigsaw.count++; 
 
-    // 【治疗跳动】强制用 style 固定图片宽高，防止未加载时高度塌陷引起乱跳
+    // 生成缩略图链接
+    var thumbImg = getThumbUrl(img);
+
+    // 首页展示缩略图(thumbImg)，点击大图看原图(img)
     if (jigsaw.halfHtml !== '') { 
         imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div></div>'; 
+        newHtml = '<div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + thumbImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div></div>'; 
         contAdd(jigsaw.halfHtml + newHtml); jigsaw.halfHtml = ''; return true 
     } 
     if (((jigsaw.count - 1) % 5) === 0) { jigsaw.loadBig = false } 
     if ((jigsaw.loadBig === false) && ((Math.floor(Math.random() * 3) === 0) || ((jigsaw.count % 5) === 0))) { 
         imgWidth = parseInt(screen.width / 2); imgHeight = parseInt(imgWidth * seting.ratio); 
-        newHtml = '<div class="item half oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div>'; 
+        newHtml = '<div class="item half oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + thumbImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div>'; 
         contAdd(newHtml); jigsaw.loadBig = true; return true 
     } 
     imgWidth = parseInt(screen.width / 4); imgHeight = parseInt(imgWidth * seting.ratio); 
-    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + img + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div>'; 
+    jigsaw.halfHtml = '<div class="item quater"><div class="Hhalf oneImg"><a href="' + img + '" data-fancybox="images"><img src="' + thumbImg + '" alt="' + alt + '" title="关键字：' + alt + '" class="pimg" style="width:100%;height:100%;object-fit:cover;"></a></div>'; 
     return true 
 } 
 
@@ -50,7 +59,7 @@ function contAdd(html) {
     var myBox = $("#walBox"); 
     var $newHtml = $(html); 
     myBox.append($newHtml); 
-    // 【治疗闪烁】把 effect: 'fadeIn' 删掉，不要淡入特效
+    // 懒加载
     $("img", $newHtml).lazyload({ threshold: 200 }) 
 } 
 
@@ -62,7 +71,7 @@ function ajaxWal(cid) {
 
     $.ajax({
         type: "GET",
-        url: seting.apiUrl, // 依然读你的 data.json
+        url: seting.apiUrl, 
         dataType: "json",
         success: function (jsonData) {
             if (jsonData && jsonData[cid] && jsonData[cid].length > 0) {
